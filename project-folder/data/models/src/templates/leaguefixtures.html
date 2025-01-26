@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>League Fixtures</title>
+  <style>
+    /* Body and General Styling */
+    body {
+      font-family: 'Times New Roman', Times, serif, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(to bottom, #555960, #282D36);
+      color: #fff;
+    }
+
+    /* Header Section */
+    .header {
+      display: flex;
+      flex-direction: column; /* Stack items vertically */
+      align-items: flex-start; /* Align everything to the left */
+      padding: 20px;
+      background-color: #222;
+      color: white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 36px; /* Larger for better visibility */
+    }
+    .league-info {
+      display: flex;
+      align-items: center;
+      gap: 15px; /* Space between logo and league name */
+      margin-top: 10px; /* Space below the main heading */
+    }
+    .league-logo {
+      width: 100px; /* Bigger logo */
+      height: 100px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 5px white); /* White background effect around the logo */
+    }
+    .league-name {
+      font-size: 28px; /* Larger font for league name */
+      font-weight: bold;
+    }
+
+    /* Fixtures Container */
+    .fixtures-container {
+      padding: 20px;
+      max-width: 900px;
+      margin: 20px auto;
+    }
+    .fixture-date {
+      margin-bottom: 30px;
+    }
+    .fixture-date h3 {
+      margin: 0;
+      padding: 10px;
+      background-color: #333740;
+      color: #fff;
+      border-radius: 5px;
+      text-align: center;
+    }
+
+    /* Fixture Box Styling */
+    .fixture {
+      margin: 10px 0;
+      padding: 15px;
+      background-color: #3A3F47;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #fff;
+    }
+    .fixture div {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+    }
+    .team-name {
+      font-size: 18px;
+      font-weight: bold;
+      margin: 0 10px;
+    }
+    .team-logo {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
+    }
+    .match-result {
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header Section -->
+  <div class="header">
+    <h1>League Fixtures</h1>
+    <div class="league-info">
+      <img id="league-logo" class="league-logo" alt="League Logo">
+      <span id="league-name" class="league-name">Loading League...</span>
+    </div>
+  </div>
+
+  <!-- Fixtures Container -->
+  <div class="fixtures-container" id="fixtures-container">
+    <!-- Fixtures will load here dynamically -->
+  </div>
+
+  <!-- Script Section -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const API_KEY = "9d75d9a7d5mshdce0c5c31b4e8abp113de0jsna22a3bb6d284";
+      const API_HOST = "api-football-v1.p.rapidapi.com";
+
+      function getQueryParams() {
+        const params = {};
+        const queryString = window.location.search.substring(1);
+        const regex = /([^&=]+)=([^&]*)/g;
+        let m;
+
+        while ((m = regex.exec(queryString))) {
+          params[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
+        }
+        return params;
+      }
+
+      const params = getQueryParams();
+      const leagueId = params.leagueId;
+
+      function loadFixtures(leagueId) {
+        const season = 2024;
+
+        fetch(
+          `https://api-football-v1.p.rapidapi.com/v3/fixtures?league=${leagueId}&season=${season}`,
+          {
+            method: "GET",
+            headers: {
+              "x-rapidapi-key": API_KEY,
+              "x-rapidapi-host": API_HOST,
+            },
+          }
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            const fixturesContainer = document.getElementById("fixtures-container");
+            const leagueNameElement = document.getElementById("league-name");
+            const leagueLogoElement = document.getElementById("league-logo");
+
+            if (data.response && data.response.length > 0) {
+              const leagueName = data.response[0].league.name;
+              const leagueLogo = data.response[0].league.logo;
+
+              leagueNameElement.textContent = leagueName;
+              leagueLogoElement.src = leagueLogo;
+              leagueLogoElement.alt = `${leagueName} logo`;
+
+              const fixturesByDate = {};
+
+              data.response.forEach((fixture) => {
+                const fixtureDate = new Date(fixture.fixture.date).toLocaleDateString();
+                const homeTeam = fixture.teams.home.name;
+                const awayTeam = fixture.teams.away.name;
+                const homeTeamLogo = fixture.teams.home.logo;
+                const awayTeamLogo = fixture.teams.away.logo;
+                const homeScore = fixture.goals.home;
+                const awayScore = fixture.goals.away;
+                const status = fixture.fixture.status.short;
+                const time = new Date(fixture.fixture.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+                const matchResult =
+                  status === "FT"
+                    ? `${homeScore} - ${awayScore}`
+                    : `(${time})`;
+
+                    const matchDisplay = `
+                    <div class="fixture">
+                      <div>
+                        <a href="teamfixtures.html?teamId=${fixture.teams.home.id}&leagueId=${leagueId}" class="team-link" style="color: inherit; text-decoration: none;">
+                          <img src="${homeTeamLogo}" alt="${homeTeam} logo" class="team-logo">
+                          <span class="team-name">${homeTeam}</span>
+                        </a>
+                      </div>
+                      <div class="match-result">
+                        <a href="fixture.html?fixtureId=${fixture.fixture.id}" class="fixture-link" style="color: inherit; text-decoration: none;">
+                          ${matchResult}
+                        </a>
+                      </div>
+                      <div>
+                        <a href="teamfixtures.html?teamId=${fixture.teams.away.id}&leagueId=${leagueId}" class="team-link" style="color: inherit; text-decoration: none;">
+                          <span class="team-name">${awayTeam}</span>
+                          <img src="${awayTeamLogo}" alt="${awayTeam} logo" class="team-logo">
+                        </a>
+                      </div>
+                    </div>`;
+
+
+                if (!fixturesByDate[fixtureDate]) {
+                  fixturesByDate[fixtureDate] = [];
+                }
+                fixturesByDate[fixtureDate].push(matchDisplay);
+              });
+
+              Object.keys(fixturesByDate).forEach((date) => {
+                const dateSection = document.createElement("div");
+                dateSection.className = "fixture-date";
+
+                const dateTitle = document.createElement("h3");
+                dateTitle.textContent = date;
+                dateSection.appendChild(dateTitle);
+
+                fixturesByDate[date].forEach((fixtureHTML) => {
+                  const fixtureElement = document.createElement("div");
+                  fixtureElement.innerHTML = fixtureHTML;
+                  dateSection.appendChild(fixtureElement);
+                });
+
+                fixturesContainer.appendChild(dateSection);
+              });
+            } else {
+              fixturesContainer.textContent = "No fixtures found.";
+            }
+          })
+          .catch((err) => {
+            console.error("Error fetching fixtures:", err);
+            document.getElementById("fixtures-container").textContent = "An error occurred while fetching fixtures.";
+          });
+      }
+
+      if (leagueId) {
+        loadFixtures(leagueId);
+      } else {
+        document.getElementById("fixtures-container").textContent = "League ID is missing.";
+      }
+    });
+  </script>
+</body>
+</html>

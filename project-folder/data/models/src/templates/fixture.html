@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fixture Details</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #222;
+      color: #fff;
+    }
+
+    .container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 30px auto;
+      background: #333;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .team {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .team-logo {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+    }
+
+    .score {
+      font-size: 42px;
+      font-weight: bold;
+    }
+
+    .goal-scorers {
+      margin: 10px 0;
+      font-size: 18px;
+      color: #ccc;
+    }
+
+    .stats {
+      margin-top: 40px;
+      padding: 40px;
+      background: #444;
+      border-radius: 10px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 30px;
+      font-size: 24px;
+    }
+
+    .stat .label {
+      flex: 1.5;
+    }
+
+    .bar-container {
+      flex: 4;
+      height: 40px;
+      background: #333;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+    }
+
+    .bar-home, .bar-away {
+      height: 100%;
+      font-size: 18px;
+      line-height: 40px;
+      color: #fff;
+      padding: 0 8px;
+      box-sizing: border-box;
+    }
+
+    .bar-home {
+      text-align: right;
+    }
+
+    .bar-away {
+      text-align: left;
+    }
+
+    .predict-button {
+      display: block;
+      margin: 30px auto;
+      padding: 20px 30px;
+      background: #555;
+      color: #fff;
+      font-size: 22px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .predict-button:hover {
+      background: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="team">
+        <img src="" alt="Home Team Logo" class="team-logo" id="home-logo">
+        <span id="home-team-name">Home Team</span>
+      </div>
+      <div class="score" id="match-score">-</div>
+      <div class="team">
+        <span id="away-team-name">Away Team</span>
+        <img src="" alt="Away Team Logo" class="team-logo" id="away-logo">
+      </div>
+    </div>
+    <div class="goal-scorers" id="home-scorers">Home Scorers: None</div>
+    <div class="goal-scorers" id="away-scorers">Away Scorers: None</div>
+    <div class="stats" id="fixture-stats">
+      <!-- Stats will be rendered here -->
+    </div>
+    <button class="predict-button" id="predict-button">Predict this Match</button>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const API_KEY = "9d75d9a7d5mshdce0c5c31b4e8abp113de0jsna22a3bb6d284";
+      const API_HOST = "api-football-v1.p.rapidapi.com";
+
+      function getQueryParams() {
+        const params = {};
+        const queryString = window.location.search.substring(1);
+        queryString.split("&").forEach((param) => {
+          const [key, value] = param.split("=");
+          params[key] = decodeURIComponent(value);
+        });
+        return params;
+      }
+
+      const params = getQueryParams();
+      const fixtureId = params.fixtureId;
+
+      async function fetchFixtureDetails(fixtureId) {
+        const response = await fetch(
+          `https://api-football-v1.p.rapidapi.com/v3/fixtures?id=${fixtureId}`,
+          {
+            method: "GET",
+            headers: {
+              "x-rapidapi-key": API_KEY,
+              "x-rapidapi-host": API_HOST,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response[0];
+      }
+
+      async function fetchTeamStats(teamId) {
+        const response = await fetch(
+          `https://api-football-v1.p.rapidapi.com/v3/teams/statistics?team=${teamId}&season=2023`,
+          {
+            method: "GET",
+            headers: {
+              "x-rapidapi-key": API_KEY,
+              "x-rapidapi-host": API_HOST,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response;
+      }
+
+      async function fetchPlayerStats(teamId) {
+        const response = await fetch(
+          `https://api-football-v1.p.rapidapi.com/v3/players?team=${teamId}&season=2023`,
+          {
+            method: "GET",
+            headers: {
+              "x-rapidapi-key": API_KEY,
+              "x-rapidapi-host": API_HOST,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response;
+      }
+
+      document.getElementById("predict-button").addEventListener("click", async () => {
+        if (!fixtureId) {
+          alert("Fixture ID is missing in the query parameters.");
+          return;
+        }
+
+        try {
+          const fixtureDetails = await fetchFixtureDetails(fixtureId);
+          const homeTeamStats = await fetchTeamStats(fixtureDetails.teams.home.id);
+          const awayTeamStats = await fetchTeamStats(fixtureDetails.teams.away.id);
+          const homePlayerStats = await fetchPlayerStats(fixtureDetails.teams.home.id);
+          const awayPlayerStats = await fetchPlayerStats(fixtureDetails.teams.away.id);
+
+          const predictionData = {
+            fixtureId,
+            fixtureDetails,
+            homeTeamStats,
+            awayTeamStats,
+            homePlayerStats,
+            awayPlayerStats,
+          };
+
+          const response = await fetch("http://127.0.0.1:8080/predict", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(predictionData),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            alert(`Error: ${errorData.error}`);
+            return;
+          }
+
+          const predictionResult = await response.json();
+          console.log("Prediction Result:", predictionResult);
+
+          alert(`
+            Home Score: ${predictionResult.home_score}
+            Away Score: ${predictionResult.away_score}
+            Win Probability: ${predictionResult.win_probability}%
+            Draw Probability: ${predictionResult.draw_probability}%
+          `);
+        } catch (error) {
+          console.error("Error during prediction:", error);
+          alert("An error occurred while predicting the match result.");
+        }
+      });
+
+      async function loadFixtureDetails(fixtureId) {
+        try {
+          const fixtureDetails = await fetchFixtureDetails(fixtureId);
+          document.getElementById("home-team-name").textContent = fixtureDetails.teams.home.name;
+          document.getElementById("away-team-name").textContent = fixtureDetails.teams.away.name;
+          document.getElementById("home-logo").src = fixtureDetails.teams.home.logo;
+          document.getElementById("away-logo").src = fixtureDetails.teams.away.logo;
+          document.getElementById("match-score").textContent = `${fixtureDetails.goals.home || 0} - ${fixtureDetails.goals.away || 0}`;
+
+          if (fixtureDetails.fixture.status.short !== "NS") {
+            document.getElementById("predict-button").style.display = "none";
+          }
+        } catch (err) {
+          console.error("Error fetching fixture details:", err);
+          document.getElementById("fixture-stats").textContent =
+            "An error occurred while loading fixture details.";
+        }
+      }
+
+      if (fixtureId) {
+        loadFixtureDetails(fixtureId);
+      } else {
+        document.getElementById("fixture-stats").textContent =
+          "Fixture ID is missing.";
+      }
+    });
+  </script>
+</body>
+</html>
