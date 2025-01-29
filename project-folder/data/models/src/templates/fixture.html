@@ -6,20 +6,21 @@
   <title>Fixture Details</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Arial', sans-serif;
       margin: 0;
       padding: 0;
-      background: #222;
+      background: linear-gradient(135deg, #1e1e2f, #2a2a40);
       color: #fff;
     }
 
     .container {
-      padding: 20px;
+      padding: 30px;
       max-width: 1200px;
       margin: 30px auto;
-      background: #333;
-      border-radius: 8px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(10px);
     }
 
     .header {
@@ -27,36 +28,42 @@
       justify-content: space-between;
       align-items: center;
       text-align: center;
-      margin-bottom: 30px;
+      margin-bottom: 40px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
     }
 
     .team {
       display: flex;
       align-items: center;
-      gap: 15px;
+      gap: 20px;
     }
 
     .team-logo {
-      width: 70px;
-      height: 70px;
+      width: 80px;
+      height: 80px;
       border-radius: 50%;
+      border: 2px solid #fff;
     }
 
     .score {
-      font-size: 42px;
+      font-size: 48px;
       font-weight: bold;
+      color: #ffcc00;
     }
 
     .goal-scorers {
-      margin: 10px 0;
+      margin: 15px 0;
       font-size: 18px;
       color: #ccc;
+      text-align: center;
     }
 
     .stats {
       margin-top: 40px;
-      padding: 40px;
-      background: #444;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.05);
       border-radius: 10px;
     }
 
@@ -64,56 +71,71 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 30px;
-      font-size: 24px;
+      margin-bottom: 25px;
+      font-size: 20px;
     }
 
     .stat .label {
       flex: 1.5;
+      color: #ffcc00;
     }
 
-    .bar-container {
-      flex: 4;
-      height: 40px;
-      background: #333;
+    .prediction-results {
+      margin-top: 40px;
+      padding: 30px;
+      background: rgba(255, 255, 255, 0.05);
       border-radius: 10px;
-      overflow: hidden;
-      position: relative;
-      display: flex;
+      animation: fadeIn 0.5s ease;
     }
 
-    .bar-home, .bar-away {
-      height: 100%;
-      font-size: 18px;
-      line-height: 40px;
-      color: #fff;
-      padding: 0 8px;
-      box-sizing: border-box;
+    .prediction-results h2 {
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 28px;
+      color: #ffcc00;
     }
 
-    .bar-home {
-      text-align: right;
+    .prediction-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
     }
 
-    .bar-away {
-      text-align: left;
-    }
-
-    .predict-button {
-      display: block;
-      margin: 30px auto;
-      padding: 20px 30px;
-      background: #555;
-      color: #fff;
-      font-size: 22px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
+    .prediction-item {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 20px;
+      border-radius: 10px;
       text-align: center;
     }
 
-    .predict-button:hover {
-      background: #666;
+    .prediction-item .label {
+      font-size: 18px;
+      color: #ccc;
+      margin-bottom: 10px;
+    }
+
+    .prediction-item .value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .loading {
+      text-align: center;
+      font-size: 20px;
+      color: #ccc;
+      margin-top: 40px;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
   </style>
 </head>
@@ -135,11 +157,68 @@
     <div class="stats" id="fixture-stats">
       <!-- Stats will be rendered here -->
     </div>
-    <button class="predict-button" id="predict-button">Predict this Match</button>
+    <div class="loading" id="loading">Loading predictions...</div>
+    <div class="prediction-results" id="prediction-results" style="display: none;">
+      <h2>Prediction Results</h2>
+      <div class="prediction-grid">
+        <div class="prediction-item">
+          <div class="label">Home Win Probability</div>
+          <div class="value" id="home-win-probability">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Draw Probability</div>
+          <div class="value" id="draw-probability">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Away Win Probability</div>
+          <div class="value" id="away-win-probability">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Predicted Score</div>
+          <div class="value" id="predicted-score">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Expected Goals</div>
+          <div class="value" id="expected-goals">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Home Shots on Target</div>
+          <div class="value" id="home-shots-on-target">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Away Shots on Target</div>
+          <div class="value" id="away-shots-on-target">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Home Shots off Target</div>
+          <div class="value" id="home-shots-off-target">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Away Shots off Target</div>
+          <div class="value" id="away-shots-off-target">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Home Shots Overall</div>
+          <div class="value" id="home-shots-overall">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Away Shots Overall</div>
+          <div class="value" id="away-shots-overall">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Actual Score</div>
+          <div class="value" id="actual-score">-</div>
+        </div>
+        <div class="prediction-item">
+          <div class="label">Actual Outcome</div>
+          <div class="value" id="actual-outcome">-</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", async () => {
       const API_KEY = "9d75d9a7d5mshdce0c5c31b4e8abp113de0jsna22a3bb6d284";
       const API_HOST = "api-football-v1.p.rapidapi.com";
 
@@ -155,6 +234,11 @@
 
       const params = getQueryParams();
       const fixtureId = params.fixtureId;
+
+      if (!fixtureId) {
+        document.getElementById("fixture-stats").textContent = "Fixture ID is missing.";
+        return;
+      }
 
       async function fetchFixtureDetails(fixtureId) {
         const response = await fetch(
@@ -216,12 +300,7 @@
         return data.response;
       }
 
-      document.getElementById("predict-button").addEventListener("click", async () => {
-        if (!fixtureId) {
-          alert("Fixture ID is missing in the query parameters.");
-          return;
-        }
-
+      async function loadPredictions(fixtureId) {
         try {
           const fixtureDetails = await fetchFixtureDetails(fixtureId);
           const homeTeamStats = await fetchTeamStats(fixtureDetails.teams.home.id);
@@ -238,7 +317,7 @@
             awayPlayerStats,
           };
 
-          const response = await fetch("http://127.0.0.1:8080/predict", {
+          const response = await fetch("/predict", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -247,25 +326,33 @@
           });
 
           if (!response.ok) {
-            const errorData = await response.json();
-            alert(`Error: ${errorData.error}`);
-            return;
+            throw new Error(`Prediction error: ${response.status}`);
           }
 
           const predictionResult = await response.json();
           console.log("Prediction Result:", predictionResult);
 
-          alert(`
-            Home Score: ${predictionResult.home_score}
-            Away Score: ${predictionResult.away_score}
-            Win Probability: ${predictionResult.win_probability}%
-            Draw Probability: ${predictionResult.draw_probability}%
-          `);
+          document.getElementById("home-win-probability").textContent = predictionResult.home_win_probability;
+          document.getElementById("draw-probability").textContent = predictionResult.draw_probability;
+          document.getElementById("away-win-probability").textContent = predictionResult.away_win_probability;
+          document.getElementById("predicted-score").textContent = predictionResult.predicted_score;
+          document.getElementById("expected-goals").textContent = predictionResult.expected_goals;
+          document.getElementById("home-shots-on-target").textContent = predictionResult.home_shots_on_target;
+          document.getElementById("away-shots-on-target").textContent = predictionResult.away_shots_on_target;
+          document.getElementById("home-shots-off-target").textContent = predictionResult.home_shots_off_target;
+          document.getElementById("away-shots-off-target").textContent = predictionResult.away_shots_off_target;
+          document.getElementById("home-shots-overall").textContent = predictionResult.home_shots_overall;
+          document.getElementById("away-shots-overall").textContent = predictionResult.away_shots_overall;
+          document.getElementById("actual-score").textContent = predictionResult.actual_score;
+          document.getElementById("actual-outcome").textContent = predictionResult.actual_outcome;
+
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("prediction-results").style.display = "block";
         } catch (error) {
           console.error("Error during prediction:", error);
-          alert("An error occurred while predicting the match result.");
+          document.getElementById("loading").textContent = "Failed to load predictions.";
         }
-      });
+      }
 
       async function loadFixtureDetails(fixtureId) {
         try {
@@ -276,22 +363,15 @@
           document.getElementById("away-logo").src = fixtureDetails.teams.away.logo;
           document.getElementById("match-score").textContent = `${fixtureDetails.goals.home || 0} - ${fixtureDetails.goals.away || 0}`;
 
-          if (fixtureDetails.fixture.status.short !== "NS") {
-            document.getElementById("predict-button").style.display = "none";
-          }
+          // Load predictions automatically
+          loadPredictions(fixtureId);
         } catch (err) {
           console.error("Error fetching fixture details:", err);
-          document.getElementById("fixture-stats").textContent =
-            "An error occurred while loading fixture details.";
+          document.getElementById("fixture-stats").textContent = "An error occurred while loading fixture details.";
         }
       }
 
-      if (fixtureId) {
-        loadFixtureDetails(fixtureId);
-      } else {
-        document.getElementById("fixture-stats").textContent =
-          "Fixture ID is missing.";
-      }
+      loadFixtureDetails(fixtureId);
     });
   </script>
 </body>

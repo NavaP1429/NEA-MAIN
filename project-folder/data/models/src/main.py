@@ -1,6 +1,6 @@
 from flask import Flask, render_template, send_from_directory, request, jsonify
 from flask_cors import CORS
-from prediction_model import EnhancedMatchPredictor, ApiClient
+from prediction_model import MatchPredictor
 
 app = Flask(__name__)
 
@@ -37,38 +37,32 @@ def predict_match():
         data = request.json
 
         fixture_id = data.get('fixtureId')
-        fixture_details = data.get('fixtureDetails')
-        home_team_stats = data.get('homeTeamStats')
-        away_team_stats = data.get('awayTeamStats')
-        home_player_stats = data.get('homePlayerStats')
-        away_player_stats = data.get('awayPlayerStats')
 
         if not fixture_id:
             return jsonify({"error": "Fixture ID is missing"}), 400
         
         api_key = "9d75d9a7d5mshdce0c5c31b4e8abp113de0jsna22a3bb6d284"
-        api_client = ApiClient(api_key)
 
-        predictor = EnhancedMatchPredictor(
-            api_client=api_client,
-            fixture_details=fixture_details or {},
-            home_team_stats=home_team_stats or {},
-            away_team_stats=away_team_stats or {},
-            home_player_stats=home_player_stats or [],
-            away_player_stats=away_player_stats or []
-        )
+        predictor = MatchPredictor(api_key)
 
-        prediction = predictor.predict_detailed_match(fixture_id)
+        prediction = predictor.evaluate_fixture(fixture_id)
 
         if prediction:
             return jsonify({
-                "home_score": prediction.home_score,
-                "away_score": prediction.away_score,
-                "goal_scorers": prediction.goal_scorers,
-                "shots": prediction.shots,
-                "win_probability": prediction.win_probability,
-                "draw_probability": prediction.draw_probability,
-                "predicted_events": prediction.predicted_events
+                "match": prediction['match'],
+                "home_win_probability": prediction['prediction']['home_win'],
+                "draw_probability": prediction['prediction']['draw'],
+                "away_win_probability": prediction['prediction']['away_win'],
+                "predicted_score": prediction['prediction']['predicted_score'],
+                "expected_goals": prediction['prediction']['expected_goals'],
+                "home_shots_on_target": prediction['prediction']['home_shots_on_target'],
+                "away_shots_on_target": prediction['prediction']['away_shots_on_target'],
+                "home_shots_off_target": prediction['prediction']['home_shots_off_target'],
+                "away_shots_off_target": prediction['prediction']['away_shots_off_target'],
+                "home_shots_overall": prediction['prediction']['home_shots_overall'],
+                "away_shots_overall": prediction['prediction']['away_shots_overall'],
+                "actual_score": prediction['actual_score'],
+                "actual_outcome": prediction['actual_outcome']
             }), 200
         else:
             return jsonify({"error": "Prediction failed"}), 500

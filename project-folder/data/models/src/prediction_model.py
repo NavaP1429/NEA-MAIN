@@ -1,250 +1,168 @@
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-from dataclasses import dataclass
-import json
-import http.client
-import random
+import requests
+from math import exp, factorial
 
-@dataclass
-class PlayerStats:
-    id: int
-    name: str
-    position: str
-    goals: int
-    assists: int
-    shots_per_game: float
-    shot_accuracy: float
-
-@dataclass
-class MatchPrediction:
-    home_score: int
-    away_score: int
-    goal_scorers: List[Dict]
-    shots: Dict[str, int]
-    possession: Dict[str, float]
-    win_probability: float
-    draw_probability: float
-    predicted_events: List[Dict]
-    match_stats: Dict[str, Any]
-
-class ApiClient:
+class MatchPredictor:
     def __init__(self, api_key):
         self.api_key = api_key
-        self.base_url = "api-football-v1.p.rapidapi.com"
-
-    def _make_api_request(self, endpoint, params):
-        conn = http.client.HTTPSConnection(self.base_url)
-        headers = {
-            'x-rapidapi-key': self.api_key,
-            'x-rapidapi-host': self.base_url
+        self.headers = {
+            'x-rapidapi-host': "api-football-v1.p.rapidapi.com",
+            'x-rapidapi-key': self.api_key
         }
+        self.team_stats_cache = {}
+
+    def fetch_fixture_by_id(self, fixture_id):
+        url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures?id={fixture_id}"
+        response = requests.get(url, headers=self.headers)
+        return response.json()
+
+    def fetch_team_stats(self, team_id, season, league_id):
+        # cache to save you requests since u a broke boi
+        cache_key = f"{team_id}-{season}-{league_id}"
+        if cache_key in self.team_stats_cache:
+            return self.team_stats_cache[cache_key]
         
-        conn.request("GET", f"/v3/{endpoint}{params}", headers=headers)
-        res = conn.getresponse()
-        return json.loads(res.read().decode("utf-8"))
-
-    def get_fixture(self, fixture_id):
-        return self._make_api_request("fixtures", f"?id={fixture_id}")
-
-    def get_team_players(self, team_id, season):
-        return self._make_api_request("players", f"?team={team_id}&season={season}")
-
-    def get_team_statistics(self, league_id, team_id, season):
-        return self._make_api_request("teams/statistics", f"?team={team_id}&league={league_id}&season={season}")
-
-class EnhancedMatchPredictor:
-    def __init__(self, api_client):
-        self.api_client = api_client
-        self.player_stats_cache = {}
-
-    def _calculate_advanced_form_score(self, team_stats):
-        """Calculate a more nuanced form score"""
-        form_score = 0.0
-        matches = team_stats.get("fixtures", {}).get("results", [])
+        url = f"https://api-football-v1.p.rapidapi.com/v3/teams/statistics?season={season}&team={team_id}&league={league_id}"
+        response = requests.get(url, headers=self.headers)
+        data = response.json()
         
-        for match in matches:
-            if match.get("status", {}).get("short") == "FT":
-                home_win = match.get("teams", {}).get("home", {}).get("winner")
-                away_win = match.get("teams", {}).get("away", {}).get("winner")
-                
-                if home_win:
-                    form_score += 1.5
-                elif away_win:
-                    form_score -= 1.0
+        if not data.get('response'):
+            raise ValueError(f"Failed to fetch stats for team {team_id}")
+        
+        self.team_stats_cache[cache_key] = data
+        return data
+
+    @staticmethod
+    def poisson_probability(mean, goals):
+        return (mean ** goals) * exp(-mean) / factorial(goals)
+
+    def predict_match(self, home_team_id, away_team_id, season, league_id):
+        home_stats = self.fetch_team_stats(home_team_id, season, league_id)['response']
+        away_stats = self.fetch_team_stats(away_team_id, season, league_id)['response']
+
+        # extract stats when teams play at home (some are better at home than away ect)
+        home_matches_home = home_stats['fixtures']['played']['home']
+        if home_matches_home == 0:
+            raise ValueError("Home team has no home matches data")
+        
+        home_goals_for = home_stats['goals']['for']['total']['home'] / home_matches_home
+        home_goals_against = home_stats['goals']['against']['total']['home'] / home_matches_home
+
+        # extract the stats for the away team when they play away (their form)
+        away_matches_away = away_stats['fixtures']['played']['away']
+        if away_matches_away == 0:
+            raise ValueError("Away team has no away matches data")
+        
+        away_goals_for = away_stats['goals']['for']['total']['away'] / away_matches_away
+        away_goals_against = away_stats['goals']['against']['total']['away'] / away_matches_away
+
+        # extract form data (last few matches)
+        home_form = home_stats['form']
+        away_form = away_stats['form']
+
+        # calculate form strength (win = 3, draw = 1, loss = 0), not using this yet will do later
+        home_form_strength = sum(3 if x == 'W' else 1 if x == 'D' else 0 for x in home_form)
+        away_form_strength = sum(3 if x == 'W' else 1 if x == 'D' else 0 for x in away_form)
+
+        # Adjust expected goals based on form strength
+        form_factor = 0.1  # This factor determines how much form impacts the prediction
+
+        # simple poisson distribution to predict goals https://stackoverflow.com/questions/60183855/find-the-probability-in-poisson-distribution-python
+        home_expected = (home_goals_for + away_goals_against) / 2
+        away_expected = (away_goals_for + home_goals_against) / 2
+        
+        home_expected += home_form_strength * form_factor / len(home_form)
+        away_expected += away_form_strength * form_factor / len(away_form)
+
+        max_goals = 8
+        home_probs = {g: self.poisson_probability(home_expected, g) for g in range(max_goals+1)}
+        away_probs = {g: self.poisson_probability(away_expected, g) for g in range(max_goals+1)}
+
+        # probabilities for win, draw, loss
+        win_prob = 0
+        draw_prob = 0
+        loss_prob = 0
+
+        # calculate probabilities for each outcome
+        for hg, hp in home_probs.items():
+            for ag, ap in away_probs.items():
+                prob = hp * ap
+                if hg > ag:
+                    win_prob += prob
+                elif hg == ag:
+                    draw_prob += prob
                 else:
-                    form_score += 0.5  # Draw
+                    loss_prob += prob
 
-        # Incorporate goal difference and recent performance
-        goal_diff = team_stats.get("goals", {}).get("for", {}).get("total", {}).get("total", 0) - \
-                    team_stats.get("goals", {}).get("against", {}).get("total", {}).get("total", 0)
-        
-        return form_score + (goal_diff * 0.1)
+        # normalize and round to 2 decimal places for readability
+        total = win_prob + draw_prob + loss_prob
+        win_prob /= total
+        draw_prob /= total
+        loss_prob /= total
 
-    def _predict_possession(self, team_stats):
-        """Predict possession based on team statistics"""
-        base_possession = team_stats.get("lineups", {}).get("played", 10)
-        passing_accuracy = team_stats.get("passes", {}).get("accuracy", 80)
-        
-        possession = max(min((base_possession * passing_accuracy / 100), 70), 30)
-        return round(possession, 2)
+        # get the most likely scoreline for the match based on the probabilities
+        home_goals = max(home_probs, key=home_probs.get)
+        away_goals = max(away_probs, key=away_probs.get)
 
-    def predict_detailed_match(self, fixture_id):
-        try:
-            # Fetch fixture details
-            fixture_data = self.api_client.get_fixture(fixture_id)
-            fixture = fixture_data["response"][0]
-            
-            home_team_id = fixture["teams"]["home"]["id"]
-            away_team_id = fixture["teams"]["away"]["id"]
-            season = fixture["league"]["season"]
-            league_id = fixture["league"]["id"]
-            
-            # Get team statistics
-            home_stats = self.api_client.get_team_statistics(league_id, home_team_id, season)["response"]
-            away_stats = self.api_client.get_team_statistics(league_id, away_team_id, season)["response"]
-            
-            # Advanced form calculation
-            home_form = self._calculate_advanced_form_score(home_stats)
-            away_form = self._calculate_advanced_form_score(away_stats)
-            
-            # Goal and match prediction
-            home_goals = max(0, int(round(abs(home_form) + random.uniform(0, 1.5))))
-            away_goals = max(0, int(round(abs(away_form) + random.uniform(0, 1.5))))
-            
-            # Possession prediction
-            home_possession = self._predict_possession(home_stats)
-            away_possession = self._predict_possession(away_stats)
-            
-            # Advanced match prediction details
-            match_prediction = MatchPrediction(
-                home_score=home_goals,
-                away_score=away_goals,
-                goal_scorers=self._predict_goal_scorers(home_team_id, away_team_id, season, home_goals, away_goals),
-                shots=self._predict_advanced_shots(home_stats, away_stats),
-                possession={
-                    "home": home_possession,
-                    "away": away_possession
-                },
-                win_probability=self._calculate_win_probability(home_form, away_form),
-                draw_probability=self._calculate_draw_probability(home_form, away_form),
-                predicted_events=self._generate_comprehensive_match_events(home_goals, away_goals),
-                match_stats={
-                    "home_team": fixture["teams"]["home"]["name"],
-                    "away_team": fixture["teams"]["away"]["name"],
-                    "league": fixture["league"]["name"],
-                    "venue": fixture["fixture"]["venue"]["name"]
-                }
-            )
-            
-            return match_prediction
-            
-        except Exception as e:
-            print(f"Prediction error: {e}")
-            return None
+        # predict shots on target and off target
+        home_shots_on_target = round(home_goals_for * 1.5)
+        away_shots_on_target = round(away_goals_for * 1.5)
+        home_shots_off_target = round(home_goals_for * 0.5)
+        away_shots_off_target = round(away_goals_for * 0.5)
 
-    def _predict_goal_scorers(self, home_team_id, away_team_id, season, home_goals, away_goals):
-        """Predict goal scorers with more sophisticated logic"""
-        scorers = []
-        
-        # Fetch player stats for both teams
-        home_players = self._get_player_stats(home_team_id, season)
-        away_players = self._get_player_stats(away_team_id, season)
-        
-        # Predict home team goal scorers
-        for _ in range(home_goals):
-            top_scorers = sorted(home_players, key=lambda p: p.goals * p.shot_accuracy, reverse=True)
-            if top_scorers:
-                scorer = random.choices(top_scorers[:3], weights=[3, 2, 1])[0]
-                scorers.append({
-                    "team": "home",
-                    "name": scorer.name,
-                    "minute": random.randint(1, 90)
-                })
-        
-        # Predict away team goal scorers
-        for _ in range(away_goals):
-            top_scorers = sorted(away_players, key=lambda p: p.goals * p.shot_accuracy, reverse=True)
-            if top_scorers:
-                scorer = random.choices(top_scorers[:3], weights=[3, 2, 1])[0]
-                scorers.append({
-                    "team": "away",
-                    "name": scorer.name,
-                    "minute": random.randint(1, 90)
-                })
-        
-        return sorted(scorers, key=lambda x: x["minute"])
+        return {
+            'home_win': win_prob,
+            'draw': draw_prob,
+            'away_win': loss_prob,
+            'predicted_score': (home_goals, away_goals),
+            'expected_goals': (round(home_expected, 2), round(away_expected, 2)),
+            'home_shots_on_target': home_shots_on_target,
+            'away_shots_on_target': away_shots_on_target,
+            'home_shots_off_target': home_shots_off_target,
+            'away_shots_off_target': away_shots_off_target,
+            'home_shots_overall': home_shots_on_target + home_shots_off_target,
+            'away_shots_overall': away_shots_on_target + away_shots_off_target
+        }
 
-    def _predict_advanced_shots(self, home_stats, away_stats):
-        """Predict shots with more detailed calculation"""
-        home_shots = home_stats.get("shots", {}).get("on", {}).get("total", 10)
-        away_shots = away_stats.get("shots", {}).get("on", {}).get("total", 10)
+    def evaluate_fixture(self, fixture_id):
+        fixture_data = self.fetch_fixture_by_id(fixture_id)
+        if not fixture_data.get('response'):
+            raise ValueError("Fixture not found")
         
-        # Add some randomness and form-based adjustment
-        home_shots = int(home_shots * random.uniform(0.8, 1.2))
-        away_shots = int(away_shots * random.uniform(0.8, 1.2))
+        fixture = fixture_data['response'][0]
+        home_team = fixture['teams']['home']
+        away_team = fixture['teams']['away']
+        actual_score = (fixture['goals']['home'], fixture['goals']['away'])
         
-        return {"home": home_shots, "away": away_shots}
+        prediction = self.predict_match(
+            home_team['id'],
+            away_team['id'],
+            fixture['league']['season'],
+            fixture['league']['id']
+        )
 
-    def _calculate_win_probability(self, home_form, away_form):
-        """Calculate win probability based on team forms"""
-        total_form = abs(home_form) + abs(away_form)
-        return round((abs(home_form) / total_form) * 100, 2) if total_form > 0 else 50.0
+        # simple logic to determine the outcome
+        if actual_score[0] > actual_score[1]:
+            outcome = "home_win"
+        elif actual_score[0] < actual_score[1]:
+            outcome = "away_win"
+        else:
+            outcome = "draw"
 
-    def _calculate_draw_probability(self, home_form, away_form):
-        """Calculate draw probability"""
-        form_difference = abs(home_form - away_form)
-        return round(max(20 - form_difference, 10), 2)
+        return {
+            'match': f"{home_team['name']} vs {away_team['name']}",
+            'prediction': prediction,
+            'actual_score': actual_score,
+            'actual_outcome': outcome
+        }
 
-    def _generate_comprehensive_match_events(self, home_goals, away_goals):
-        """Generate a comprehensive list of match events"""
-        events = []
-        
-        # Add kicks, cards, goals
-        event_types = [
-            {"type": "Kick-off", "minute": 0},
-            {"type": "Yellow Card", "minute": random.randint(10, 80)},
-            {"type": "Substitution", "minute": random.randint(45, 85)}
-        ]
-        
-        # Add goals to events
-        events.extend([
-            {"minute": random.randint(1, 90), "type": "Goal", "team": "home"} 
-            for _ in range(home_goals)
-        ])
-        events.extend([
-            {"minute": random.randint(1, 90), "type": "Goal", "team": "away"} 
-            for _ in range(away_goals)
-        ])
-        
-        # Sort events chronologically
-        return sorted(events, key=lambda x: x["minute"])
 
-    def _get_player_stats(self, team_id, season):
-        """Retrieve player statistics with caching"""
-        if team_id in self.player_stats_cache:
-            return self.player_stats_cache[team_id]
-        
-        try:
-            players_data = self.api_client.get_team_players(team_id, season)
-            players = []
-            
-            for player in players_data.get("response", []):
-                stats = player.get("statistics", [{}])[0]
-                
-                player_stat = PlayerStats(
-                    id=player.get("player", {}).get("id"),
-                    name=player.get("player", {}).get("name"),
-                    position=stats.get("games", {}).get("position", ""),
-                    goals=stats.get("goals", {}).get("total", 0) or 0,
-                    assists=stats.get("goals", {}).get("assists", 0) or 0,
-                    shots_per_game=(stats.get("shots", {}).get("total", 0) or 0) / max((stats.get("games", {}).get("appearances", 1) or 1), 1),
-                    shot_accuracy=(stats.get("shots", {}).get("on", 0) or 0) / max((stats.get("shots", {}).get("total", 1) or 1), 1)
-                )
-                players.append(player_stat)
-            
-            self.player_stats_cache[team_id] = players
-            return players
-        
-        except Exception as e:
-            print(f"Player stats error: {e}")
-            return []
+# will only run if this script is executed directly so dw abt this below
+if __name__ == "__main__":
+    API_KEY = "9d75d9a7d5mshdce0c5c31b4e8abp113de0jsna22a3bb6d284" 
+    predictor = MatchPredictor(API_KEY)
+    
+    try:
+        result = predictor.evaluate_fixture(1208063) # fixture id goes here
+        print(result)
+    except Exception as e:
+        print(f"Error: {e}")
