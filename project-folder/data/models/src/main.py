@@ -48,22 +48,7 @@ def predict_match():
         prediction = predictor.evaluate_fixture(fixture_id)
 
         if prediction:
-            return jsonify({
-                "match": prediction['match'],
-                "home_win_probability": prediction['prediction']['home_win'],
-                "draw_probability": prediction['prediction']['draw'],
-                "away_win_probability": prediction['prediction']['away_win'],
-                "predicted_score": prediction['prediction']['predicted_score'],
-                "expected_goals": prediction['prediction']['expected_goals'],
-                "home_shots_on_target": prediction['prediction']['home_shots_on_target'],
-                "away_shots_on_target": prediction['prediction']['away_shots_on_target'],
-                "home_shots_off_target": prediction['prediction']['home_shots_off_target'],
-                "away_shots_off_target": prediction['prediction']['away_shots_off_target'],
-                "home_shots_overall": prediction['prediction']['home_shots_overall'],
-                "away_shots_overall": prediction['prediction']['away_shots_overall'],
-                "actual_score": prediction['actual_score'],
-                "actual_outcome": prediction['actual_outcome']
-            }), 200
+            return prediction, 200
         else:
             return jsonify({"error": "Prediction failed"}), 500
     except Exception as e:
