@@ -180,7 +180,7 @@ class MatchPredictor:
         if "error" in lineup:
             return {"error": "cannot predict contribs without lineup."}
 
-        contributions = {"goals": {}, "shots_on_target": {}}
+        contributions = {"goals": {}, "shots_on_target": {}, "shots_taken": {}}
         total_weight = 0.0
         player_weights: Dict[int, float] = {}
 
@@ -213,6 +213,8 @@ class MatchPredictor:
             contributions["goals"][player["name"]] = round(predicted_goals, 2)
             # for shots on target, assume roughly 1.5 times the goals (heuristic)
             contributions["shots_on_target"][player["name"]] = round(predicted_goals * 1.5, 2)
+            # predict shots taken: heuristic multiplier (e.g., 2.5 shots per goal)
+            contributions["shots_taken"][player["name"]] = round(predicted_goals * 2.5, 2)
 
         return contributions
 
@@ -232,8 +234,8 @@ class MatchPredictor:
             away_avg_for = float(away_stats["goals"]["for"]["average"]["away"])
             away_avg_against = float(away_stats["goals"]["against"]["average"]["away"])
 
-            # calculate expected goals as the average of team attack and opponent defense
-            home_expected = (home_avg_for + away_avg_against) / 2
+            # calculate expected goals as the average of team attack and opponent defense; add a small home advantage offset
+            home_expected = (home_avg_for + away_avg_against) / 2 + 0.25
             away_expected = (away_avg_for + home_avg_against) / 2
 
             # calculate poisson probabilities up to a reasonable maximum number of goals
@@ -253,14 +255,16 @@ class MatchPredictor:
                         loss_prob += prob
 
             total = win_prob + draw_prob + loss_prob
+
+            # compute predicted score as weighted averages of goals
+            predicted_home = round(sum(g * p for g, p in home_probs.items()))
+            predicted_away = round(sum(g * p for g, p in away_probs.items()))
+
             outcome = {
                 "home_win": round(win_prob / total, 2),
                 "draw": round(draw_prob / total, 2),
                 "away_win": round(loss_prob / total, 2),
-                "predicted_score": (
-                    max(home_probs, key=home_probs.get),
-                    max(away_probs, key=away_probs.get)
-                ),
+                "predicted_score": (predicted_home, predicted_away),
                 "expected_goals": (
                     round(home_expected, 2),
                     round(away_expected, 2)
@@ -286,6 +290,11 @@ class MatchPredictor:
                                                              match_prediction["expected_goals"][0])
         away_contrib = self.predict_individual_contributions(away_team_id, season, league_id,
                                                              match_prediction["expected_goals"][1])
+        # compute team-level shots aggregates as integer values
+        home_shots_taken = int(round(sum(home_contrib["shots_taken"].values())))
+        home_shots_on_target = int(round(sum(home_contrib["shots_on_target"].values())))
+        away_shots_taken = int(round(sum(away_contrib["shots_taken"].values())))
+        away_shots_on_target = int(round(sum(away_contrib["shots_on_target"].values())))
 
         detailed_prediction = {
             "team_prediction": match_prediction,
@@ -296,6 +305,16 @@ class MatchPredictor:
             "individual_contributions": {
                 "home": home_contrib,
                 "away": away_contrib
+            },
+            "team_shots": {
+                "home": {
+                    "shots_taken": home_shots_taken,
+                    "shots_on_target": home_shots_on_target
+                },
+                "away": {
+                    "shots_taken": away_shots_taken,
+                    "shots_on_target": away_shots_on_target
+                }
             }
         }
         return detailed_prediction
